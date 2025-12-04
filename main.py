@@ -6,7 +6,7 @@
 # =============================================================================
 import numpy as np
 from typing import Callable
-from inspect import isfunction
+from math import isfinite
 
 
 def func(x: int | float | np.ndarray) -> int | float | np.ndarray:
@@ -165,21 +165,31 @@ def secant(
     fa = f(a)
     fb = f(b)
 
-    for iter_count in range(1, max_iters + 1):
+    if not (isfinite(fa) and isfinite(fb)):
+        return None
 
-        if fb - fa == 0:
-            return None
+    if fa * fb > 0:
+        return None
 
-        c = b - fb * (b - a) / (fb - fa)
-        fc = f(c)
+    for k in range(1, max_iters + 1):
 
-        if abs(fc) < epsilon:
-            return c, iter_count
+        x = b - fb * (b - a) / (fb - fa)
+        fx = f(x)
 
-        a, fa = b, fb
-        b, fb = c, fc
+        if abs(fx) <= epsilon:
+            return x, k
 
-    return b, max_iters
+        if fa * fx < 0:
+            b = x
+            fb = fx
+        else:
+            a = x
+            fa = fx
+
+        if abs(b - a) <= epsilon:
+            return x, k
+
+    return x, max_iters
 
 
 def difference_quotient(
@@ -241,75 +251,54 @@ def newton(
             - Liczba wykonanych iteracji.
         Jeżeli dane wejściowe są niepoprawne funkcja zwraca `None`.
     """
-    if not (isfunction(f) and isfunction(df) and isfunction(ddf)):
-        return None
-
-    if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
-        return None
-    if not isinstance(max_iter, int):
-        return None
-    if not isinstance(epsilon, (int, float)):
+    if a == b or epsilon <= 0 or max_iter <= 0:
         return None
 
     a = float(a)
     b = float(b)
-    epsilon = float(epsilon)
 
-    if a >= b or epsilon <= 0 or max_iter <= 0:
+    fa = f(a)
+    fb = f(b)
+
+    if not (isfinite(fa) and isfinite(fb)):
         return None
 
-    try:
-        fa = f(a)
-        fb = f(b)
-        dfa = df(a)
-        dfb = df(b)
-    except Exception:
-        # coś poszło źle przy obliczaniu funkcji / pochodnych
-        return None
-
-    # musi być zmiana znaku na końcach przedziału
     if fa * fb > 0:
         return None
 
-    # dla zbieżności Newtona: pochodna nie może zmieniać znaku
-    if dfa * dfb <= 0:
+    dda = ddf(a)
+    ddb = ddf(b)
+
+    if not (isfinite(dda) and isfinite(ddb)):
         return None
 
-    # --- wybór punktu startowego -------------------------------------------
-    # najpierw środek przedziału
-    x = 0.5 * (a + b)
-
-    # jeśli warunek f(x)*f''(x) <= 0, to spróbuj końce przedziału
-    try:
-        if f(x) * ddf(x) <= 0:
-            if f(a) * ddf(a) > 0:
-                x = a
-            elif f(b) * ddf(b) > 0:
-                x = b
-            else:
-                # nie znaleziono dobrego punktu startowego
-                return None
-    except Exception:
+    if fa * dda > 0:
+        x = a
+    elif fb * ddb > 0:
+        x = b
+    else:
         return None
 
-    # --- właściwa iteracja Newtona -----------------------------------------
-    iteration = 0
-    while iteration < max_iter:
+    for k in range(1, max_iter + 1):
         fx = f(x)
         dfx = df(x)
 
+        if not (isfinite(fx) and isfinite(dfx)):
+            return None
+
         if dfx == 0:
-            # nie wolno dzielić przez zero – przerwij
             return None
 
         x_new = x - fx / dfx
-        iteration += 1
 
-        # warunek stopu – dokładność w argumencie albo w wartości funkcji
-        if abs(x_new - x) <= epsilon or abs(fx) <= epsilon:
-            return (x_new, iteration)
+        if x_new < a or x_new > b:
+            return None
+
+        fx_new = f(x_new)
+
+        if abs(fx_new) <= epsilon or abs(x_new - x) <= epsilon:
+            return x_new, k
 
         x = x_new
 
-    # po max_iter zwróć ostatnią aproksymację
-    return (x, iteration)
+    return x, max_iter
